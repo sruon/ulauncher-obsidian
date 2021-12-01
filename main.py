@@ -7,6 +7,7 @@ from src.functions import (
     append_to_note_in_vault,
     find_note_in_vault,
     find_string_in_vault,
+    find_tag_in_vault,
     create_note_in_vault,
     generate_daily_url,
     generate_url,
@@ -54,9 +55,8 @@ class KeywordQueryEventListener(EventListener):
         vault = extension.preferences["obsidian_vault"]
 
         keyword_search_note_vault = extension.preferences["obsidian_search_note_vault"]
-        keyword_search_string_vault = extension.preferences[
-            "obsidian_search_string_vault"
-        ]
+        keyword_search_string_vault = extension.preferences["obsidian_search_string_vault"]
+        keyword_search_tag_vault = extension.preferences["obsidian_search_tag_vault"]
         keyword_open_daily = extension.preferences["obsidian_open_daily"]
         keyword_quick_capture = extension.preferences["obsidian_quick_capture"]
 
@@ -81,7 +81,11 @@ class KeywordQueryEventListener(EventListener):
         elif keyword == keyword_quick_capture:
             items = quick_capute_note(search)
             return RenderResultListAction(items)
-
+        elif keyword == keyword_search_tag_vault:
+            notes = find_tag_in_vault(vault, search)
+            items = show_notes(vault, notes)
+            items += create_note(search)
+            return RenderResultListAction(items)
         return DoNothingAction()
 
 

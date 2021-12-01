@@ -4,7 +4,7 @@ import json
 import datetime
 from urllib.parse import quote, urlencode
 from pathlib import Path
-from typing import List, Literal
+from typing import List, Literal, Tuple
 import logging
 from ulauncher.utils.fuzzy_search import get_score
 
@@ -13,7 +13,7 @@ from .moment import convert_moment_to_strptime_format
 logger = logging.getLogger(__name__)
 
 
-def fuzzyfinder(search: str, items: List[str]) -> List[str]:
+def fuzzyfinder(search: str, items: List[str]) -> List[Tuple[float, str]]:
     """
     >>> fuzzyfinder("hallo", ["hi", "hu", "hallo", "false"])
     ['hallo', 'false', 'hi', 'hu']
@@ -21,11 +21,12 @@ def fuzzyfinder(search: str, items: List[str]) -> List[str]:
     scores = []
     for i in items:
         score = get_score(search, get_name_from_path(i))
-        scores.append((score, i))
+        # Don't return matches with 0.0 score
+        if score > 0.0:
+            scores.append((score, i))
 
     scores = sorted(scores, key=lambda score: score[0], reverse=True)
-
-    return list(map(lambda score: score[1], scores))
+    return scores
 
 
 class Note:
@@ -199,7 +200,7 @@ def generate_daily_url(vault: str) -> str:
     )
 
 
-def get_name_from_path(path: str, exclude_ext=True) -> str:
+def get_name_from_path(path: str, exclude_ext=True, vault=None) -> str:
     """
     >>> get_name_from_path("~/home/test/bla/hallo.md")
     'hallo'
@@ -207,11 +208,27 @@ def get_name_from_path(path: str, exclude_ext=True) -> str:
     >>> get_name_from_path("~/home/Google Drive/Brain 1.0", False)
     'Brain 1.0'
     """
-    base = os.path.basename(path)
+    # If vault is provided, try to provide a better title instead of just the filename.
+    if vault:
+        base = path.replace(vault, '').lstrip('/').replace('/', ' > ')
+    else:
+        base = os.path.basename(path)
     if exclude_ext:
         split = os.path.splitext(base)
         return split[0]
     return base
+
+
+def assign_emoji_score(score):
+    if score >= 95:
+        return "🌟🌟🌟🌟🌟"
+    elif score >= 75:
+        return "🌟🌟🌟"
+    elif score >= 50:
+        return "🌟🌟"
+    elif score >= 25:
+        return "🌟"
+    return ""
 
 
 def find_note_in_vault(vault: str, search: str) -> List[Note]:
@@ -224,9 +241,43 @@ def find_note_in_vault(vault: str, search: str) -> List[Note]:
     files = glob.glob(search_pattern, recursive=True)
     suggestions = fuzzyfinder(search, files)
     return [
-        Note(name=get_name_from_path(s), path=s, description=s) for s in suggestions
+        Note(name=get_name_from_path(s[1], vault=vault), path=s[1], description=assign_emoji_score(s[0])) for s in suggestions
     ]
 
+
+def find_tag_in_vault(vault: str, search: str) -> List[Note]:
+    """
+    >>> find_tag_in_vault("test-vault", "daily")
+    [Note<test-vault/Test.md>, Note<test-vault/subdir/Test.md>]
+    """
+    files = glob.glob(os.path.join(vault, "**", "*.md"), recursive=True)
+
+    suggestions = []
+
+    CONTEXT_SIZE = 10
+    if not search:
+        return []
+    search = search.lower()
+    if not search.startswith('#'):
+        search = f"#{search}"
+    logger.info(search)
+    for file in files:
+        if os.path.isfile(file) and search is not None:
+            with open(file, "r") as f:
+                for line in f:
+                    left, sep, right = line.lower().partition(search)
+                    if sep:
+                        context = left[CONTEXT_SIZE:] + sep + right[:CONTEXT_SIZE]
+                        suggestions.append(
+                            Note(
+                                name=get_name_from_path(file, vault=vault),
+                                path=file,
+                                description=context,
+                            )
+                        )
+                        break
+
+    return suggestions
 
 def find_string_in_vault(vault: str, search: str) -> List[Note]:
     """
@@ -249,7 +300,7 @@ def find_string_in_vault(vault: str, search: str) -> List[Note]:
                         context = left[CONTEXT_SIZE:] + sep + right[:CONTEXT_SIZE]
                         suggestions.append(
                             Note(
-                                name=get_name_from_path(file),
+                                name=get_name_from_path(file, vault=vault),
                                 path=file,
                                 description=context,
                             )

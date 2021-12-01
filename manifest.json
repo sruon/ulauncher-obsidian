@@ -19,8 +19,15 @@
       "id": "obsidian_search_note_vault",
       "type": "keyword",
       "name": "Search Note",
-      "description": "Search the name your notes",
+      "description": "Search the name of your notes",
       "default_value": "on"
+    },
+    {
+      "id": "obsidian_search_tag_vault",
+      "type": "keyword",
+      "name": "Search Tag",
+      "description": "Search the tags of your notes",
+      "default_value": "ot"
     },
     {
       "id": "obsidian_search_string_vault",
